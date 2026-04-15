@@ -122,7 +122,7 @@ export default function WoundDetail() {
   const hasMultipleCheckins = wound.checkins && wound.checkins.length >= 2;
 
   // Assuming backend is on port 3000 and serves uploads
-  const backendUrl = 'http://localhost:3000/';
+  const backendUrl = window.location.hostname === 'localhost' ? 'http://localhost:3000/' : 'https://ai-wound-analyzer.onrender.com/';
 
   const toggleHeatmap = (checkinId) => {
     setHeatmapToggles(prev => ({ ...prev, [checkinId]: !prev[checkinId] }));
