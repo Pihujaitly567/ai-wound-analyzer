@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Wound Healing Assistant</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <main class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>AI Wound Healing Assistant</h1>
+            <p>Upload a wound image to analyze its healing progress.</p>
+        </header>
+
+        <!-- Upload Area -->
+        <div class="card upload-card" id="upload-area">
+            <input type="file" id="file-input" accept="image/*" hidden>
+            <div class="upload-content">
+                <div class="upload-icon">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="17 8 12 3 7 8"></polyline>
+                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                </div>
+                <h3>Drag & Drop your image here</h3>
+                <p>or click to browse</p>
+            </div>
+            
+            <!-- Preview Area (hidden by default) -->
+            <div class="preview-area hidden" id="preview-area">
+                <img id="image-preview" src="" alt="Preview">
+                <button id="reset-btn" class="btn-secondary">Choose another image</button>
+            </div>
+        </div>
+
+        <!-- Action Area -->
+        <div class="action-area" id="action-area">
+            <button id="analyze-btn" class="btn-primary" disabled>Analyze Image</button>
+        </div>
+
+        <!-- Loading State -->
+        <div class="loading-state hidden" id="loading-state">
+            <div class="spinner"></div>
+            <p>Analyzing wound characteristics...</p>
+        </div>
+
+        <!-- Result Area -->
+        <div class="card result-card hidden" id="result-area">
+            <div class="result-header">
+                <h2 id="result-status" class="status-heading"></h2>
+            </div>
+            <div class="result-body">
+                <div class="result-detail">
+                    <span class="label">Detected Type:</span>
+                    <span id="result-class" class="value"></span>
+                </div>
+                <div class="result-detail">
+                    <span class="label">Confidence:</span>
+                    <span id="result-confidence" class="value"></span>
+                </div>
+                <div class="result-message">
+                    <p id="result-recommendation"></p>
+                </div>
+            </div>
+        </div>
+
+    </main>
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
