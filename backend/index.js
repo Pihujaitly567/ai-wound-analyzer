@@ -100,12 +100,13 @@ app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 const JWT_SECRET = 'woundiq-super-secret-key-2026';
-const AI_SERVICE_URL = 'http://127.0.0.1:5000/predict';
+const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://127.0.0.1:5000/predict';
 
 // Connect to MongoDB
-mongoose.connect('mongodb://127.0.0.1:27017/woundiq')
+const mongoUri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/woundiq';
+mongoose.connect(mongoUri)
   .then(() => console.log('MongoDB Connected to WoundIQ'))
-  .catch(err => console.log('MongoDB connection error (start mongodb if you havent):', err));
+  .catch(err => console.log('MongoDB connection error:', err));
 
 const upload = multer({ dest: 'uploads/' });
 
