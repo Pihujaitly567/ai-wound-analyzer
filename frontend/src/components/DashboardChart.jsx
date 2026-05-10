@@ -1,23 +1,20 @@
+import { useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
-import { TrendingUp, Activity } from 'lucide-react';
+import { TrendingUp, Activity, ChevronDown } from 'lucide-react';
 
 export default function DashboardChart({ wounds }) {
-  // Find the wound with the most checkins for the showcase chart
   const activeWounds = wounds.filter(w => w.checkins && w.checkins.length > 0);
+  const [selectedIndex, setSelectedIndex] = useState(0);
   
   if (activeWounds.length === 0) {
-    return null; // Don't show chart if no data
+    return null;
   }
 
-  // Pick the most recently updated wound that has data
-  const mainWound = activeWounds[0]; 
+  const mainWound = activeWounds[selectedIndex] || activeWounds[0]; 
   
-  // If ANY checkin has cm2, we plot in cm2 mode
   const hasCm2 = mainWound.checkins.some(chk => chk.woundAreaCm2 != null);
 
   const chartData = [...mainWound.checkins].reverse().map(chk => {
-    // We want to plot a "Positive Recovery Trajectory" metric.
-    // If the category is anything but "Healing", the "Health Score" drops.
     let healthScore = 100;
     if (chk.category === 'Risky') healthScore = 100 - chk.confidence;
     if (chk.category?.includes('Moderate')) healthScore = 50 + (100 - chk.confidence)/2;
@@ -31,13 +28,23 @@ export default function DashboardChart({ wounds }) {
     };
   });
 
-  // If there's only one data point, standard line charts look weird, so just show a status
   if (chartData.length < 2) {
     return (
       <div className="glass-card p-6 bg-white/60 mb-8 border border-white">
          <div className="flex items-center gap-3 text-slate-800 font-bold text-lg mb-2">
             <Activity className="text-health-500" /> Recovery Trajectory: <span className="text-health-600">{mainWound.title}</span>
          </div>
+         {activeWounds.length > 1 && (
+           <div className="mb-3">
+             <select 
+               value={selectedIndex} 
+               onChange={e => setSelectedIndex(Number(e.target.value))}
+               className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-health-200"
+             >
+               {activeWounds.map((w, i) => <option key={w._id} value={i}>{w.title}</option>)}
+             </select>
+           </div>
+         )}
          <p className="text-slate-500 font-medium text-sm">Upload another photo tomorrow to start seeing your AI-generated healing curve!</p>
       </div>
     );
@@ -56,7 +63,23 @@ export default function DashboardChart({ wounds }) {
           <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2 mb-1">
             <Activity className="text-indigo-500" /> Recovery Trajectory
           </h2>
-          <p className="text-slate-500 font-medium">Tracking AI Health Score for: <strong className="text-slate-700">{mainWound.title}</strong></p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-slate-500 font-medium">Tracking AI Health Score for:</span>
+            {activeWounds.length > 1 ? (
+              <div className="relative inline-block">
+                <select 
+                  value={selectedIndex} 
+                  onChange={e => setSelectedIndex(Number(e.target.value))}
+                  className="appearance-none pl-3 pr-8 py-1.5 rounded-lg bg-white border border-health-200 text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-health-200 cursor-pointer hover:border-health-400 transition-colors"
+                >
+                  {activeWounds.map((w, i) => <option key={w._id} value={i}>{w.title}</option>)}
+                </select>
+                <ChevronDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              </div>
+            ) : (
+              <strong className="text-slate-700">{mainWound.title}</strong>
+            )}
+          </div>
         </div>
         
         <div className={`px-4 py-2 rounded-xl flex items-center gap-2 font-bold ${isImproving ? 'bg-health-100 text-health-700 border border-health-200' : 'bg-amber-100 text-amber-700 border border-amber-200'}`}>

@@ -7,13 +7,25 @@ import DailyChecklist from '../components/DailyChecklist';
 
 export default function Dashboard() {
   const [wounds, setWounds] = useState([]);
+  const [stats, setStats] = useState(null);
   const [newTitle, setNewTitle] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      try {
+        const user = JSON.parse(userStr);
+        if (user.role === 'doctor') {
+          navigate('/doctor');
+          return;
+        }
+      } catch(e) {}
+    }
     fetchWounds();
-  }, []);
+    fetchStats();
+  }, [navigate]);
 
   const fetchWounds = async () => {
     try {
@@ -23,6 +35,17 @@ export default function Dashboard() {
       setWounds(res.data);
     } catch (err) {
       if (err.response?.status === 401) navigate('/auth');
+    }
+  };
+
+  const fetchStats = async () => {
+    try {
+      const res = await axios.get('/api/stats', {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      setStats(res.data);
+    } catch (err) {
+      console.error("Error fetching stats", err);
     }
   };
 
@@ -72,6 +95,27 @@ export default function Dashboard() {
         )}
         </div>
       </div>
+
+      {stats && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <div className="bg-white/70 p-4 rounded-xl border border-slate-200 shadow-sm text-center">
+            <p className="text-slate-500 font-bold text-xs uppercase tracking-wider mb-1">Total Scans</p>
+            <p className="text-3xl font-black text-indigo-600">{stats.totalCheckins}</p>
+          </div>
+          <div className="bg-white/70 p-4 rounded-xl border border-slate-200 shadow-sm text-center">
+            <p className="text-slate-500 font-bold text-xs uppercase tracking-wider mb-1">Active Cases</p>
+            <p className="text-3xl font-black text-health-600">{stats.activeWounds}</p>
+          </div>
+          <div className="bg-white/70 p-4 rounded-xl border border-slate-200 shadow-sm text-center">
+            <p className="text-slate-500 font-bold text-xs uppercase tracking-wider mb-1">Risky Scans</p>
+            <p className="text-3xl font-black text-rose-500">{stats.riskyWounds}</p>
+          </div>
+          <div className="bg-white/70 p-4 rounded-xl border border-slate-200 shadow-sm text-center">
+            <p className="text-slate-500 font-bold text-xs uppercase tracking-wider mb-1">Healed</p>
+            <p className="text-3xl font-black text-slate-700">{stats.healedWounds}</p>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div>

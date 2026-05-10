@@ -7,6 +7,7 @@ export default function Auth() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [role, setRole] = useState('patient');
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
@@ -15,11 +16,15 @@ export default function Auth() {
     setError('');
     try {
       const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
-      const payload = isLogin ? { email, password } : { name, email, password };
+      const payload = isLogin ? { email, password } : { name, email, password, role };
       const res = await axios.post(endpoint, payload);
       localStorage.setItem('token', res.data.token);
       localStorage.setItem('user', JSON.stringify(res.data.user));
-      navigate('/');
+      if (res.data.user.role === 'doctor') {
+        navigate('/doctor');
+      } else {
+        navigate('/');
+      }
     } catch (err) {
       setError(err.response?.data?.error || 'An error occurred');
     }
@@ -39,12 +44,30 @@ export default function Auth() {
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-5">
           {!isLogin && (
-            <input 
-              type="text" 
-              placeholder="Full Name" 
-              className="px-4 py-3.5 rounded-xl bg-white/60 border border-health-100 focus:outline-none focus:border-health-300 focus:ring-4 focus:ring-health-100 transition-all placeholder:text-slate-400 font-medium text-slate-700"
-              value={name} onChange={e => setName(e.target.value)} required 
-            />
+            <>
+              <input 
+                type="text" 
+                placeholder="Full Name" 
+                className="px-4 py-3.5 rounded-xl bg-white/60 border border-health-100 focus:outline-none focus:border-health-300 focus:ring-4 focus:ring-health-100 transition-all placeholder:text-slate-400 font-medium text-slate-700"
+                value={name} onChange={e => setName(e.target.value)} required 
+              />
+              <div className="flex bg-white/60 border border-health-100 p-1 rounded-xl">
+                <button 
+                  type="button" 
+                  onClick={() => setRole('patient')} 
+                  className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${role === 'patient' ? 'bg-health-500 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}
+                >
+                  Patient
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => setRole('doctor')} 
+                  className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${role === 'doctor' ? 'bg-indigo-500 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}
+                >
+                  Medical Professional
+                </button>
+              </div>
+            </>
           )}
           <input 
             type="email" 
@@ -68,6 +91,39 @@ export default function Auth() {
           <button onClick={() => setIsLogin(!isLogin)} className="text-indigo-500 font-bold hover:text-indigo-600 transition-colors">
             {isLogin ? 'Create one now' : 'Login instead'}
           </button>
+        </div>
+
+        {/* Demo Credentials */}
+        <div className="mt-6 p-4 rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/60 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-16 h-16 bg-amber-200/30 rounded-full -translate-y-1/2 translate-x-1/2"></div>
+          <p className="text-xs font-bold text-amber-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+            <span className="inline-block w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+            Demo Access
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <button 
+              type="button"
+              onClick={() => {
+                setIsLogin(true);
+                setEmail('demo@woundiq.com');
+                setPassword('demo1234');
+              }}
+              className="flex-1 bg-white hover:bg-amber-100 text-amber-800 text-sm font-bold py-2 px-3 rounded-lg border border-amber-200 transition-colors"
+            >
+              Patient Demo
+            </button>
+            <button 
+              type="button"
+              onClick={() => {
+                setIsLogin(true);
+                setEmail('doctor@woundiq.com');
+                setPassword('doc1234');
+              }}
+              className="flex-1 bg-white hover:bg-indigo-100 text-indigo-800 text-sm font-bold py-2 px-3 rounded-lg border border-indigo-200 transition-colors"
+            >
+              Doctor Demo
+            </button>
+          </div>
         </div>
       </div>
     </div>

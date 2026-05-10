@@ -4,6 +4,7 @@ import { Stethoscope } from 'lucide-react';
 export default function Navbar() {
   const navigate = useNavigate();
   const token = localStorage.getItem('token');
+  const user = JSON.parse(localStorage.getItem('user') || 'null');
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -20,12 +21,22 @@ export default function Navbar() {
         </Link>
         <div>
           {token ? (
-            <button 
-              onClick={handleLogout}
-              className="text-health-700 hover:text-health-900 font-medium transition-colors"
-            >
-              Sign Out
-            </button>
+            <div className="flex items-center gap-6">
+              {user && user.role === 'doctor' && (
+                <Link to="/doctor" className="text-indigo-600 hover:text-indigo-800 font-bold transition-colors">
+                  Doctor Portal
+                </Link>
+              )}
+              <Link to="/profile" className="text-slate-600 hover:text-health-700 font-medium transition-colors">
+                Profile
+              </Link>
+              <button 
+                onClick={handleLogout}
+                className="text-health-700 hover:text-health-900 font-medium transition-colors"
+              >
+                Sign Out
+              </button>
+            </div>
           ) : (
             <div className="text-health-600 font-medium">Welcome</div>
           )}

@@ -69,8 +69,15 @@ async function analyzeImageWithGemini(imagePath) {
     const mimeType = mimeMap[ext] || 'image/jpeg';
     const base64Image = fs.readFileSync(imagePath).toString('base64');
     
-    const validClasses = ['Burns', 'Diabetic Wounds', 'Venous Wounds', 'Pressure Wounds', 'Normal Healing', 'Abrasions', 'Surgical Wounds'];
-    const prompt = `You are an expert AI dermatologist. Analyze this wound image. First, identify the wound type. It MUST be EXACTLY one of these strings: [${validClasses.join(', ')}]. If unsure, pick the closest. Second, identify the risk category exactly as either "Risky" or "Mild". Third, provide a confidence score between 0.0 and 1.0. Respond ONLY with a valid JSON strictly following this schema: {"class": "WoundType", "category": "RiskyOrMild", "confidence": 0.95}`;
+    const validClasses = ['Burns', 'Diabetic Wounds', 'Venous Wounds', 'Pressure Wounds', 'Normal Healing', 'Abrasions', 'Surgical Wounds', 'Cut', 'Bruises', 'Laseration'];
+    const prompt = `You are an expert AI dermatologist and wound care specialist. Carefully analyze this wound image.
+
+1. WOUND TYPE: Classify it as EXACTLY one of these: ${validClasses.join(', ')}. Choose the most accurate match.
+2. RISK CATEGORY: Either "Risky" (burns, diabetic, venous, pressure wounds, deep cuts) or "Mild" (abrasions, normal healing, surface cuts, bruises).
+3. CONFIDENCE: A percentage between 50 and 99 representing how confident you are.
+
+Respond with ONLY valid JSON, no markdown, no explanation:
+{"class": "WoundType", "category": "Risky or Mild", "confidence": 85}`;
 
     const res = await axios.post(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
       contents: [{
@@ -84,7 +91,12 @@ async function analyzeImageWithGemini(imagePath) {
     
     const text = res.data.candidates[0].content.parts[0].text;
     const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    return JSON.parse(jsonStr);
+    const parsed = JSON.parse(jsonStr);
+    // Normalize confidence: if it's 0-1 range, convert to percentage
+    if (parsed.confidence && parsed.confidence <= 1) {
+      parsed.confidence = parsed.confidence * 100;
+    }
+    return parsed;
   } catch (err) {
     console.error('Gemini Vision Error:', err?.response?.data || err.message);
     return null;
@@ -93,6 +105,74 @@ async function analyzeImageWithGemini(imagePath) {
 const User = require('./models/User');
 const WoundHistory = require('./models/WoundHistory');
 const knowledgeBase = require('./knowledgeBase');
+const { Jimp } = require('jimp');
+
+// Custom CV Algorithmic Fallback — No external API needed!
+async function analyzeImageLocally(imagePath) {
+  try {
+    const image = await Jimp.read(imagePath);
+    // Resize for faster processing
+    image.resize({ w: 200 });
+    
+    let totalPixels = 0;
+    let redPixels = 0;
+    let darkPixels = 0;
+    
+    image.scan(0, 0, image.bitmap.width, image.bitmap.height, function(x, y, idx) {
+      const red = this.bitmap.data[idx + 0];
+      const green = this.bitmap.data[idx + 1];
+      const blue = this.bitmap.data[idx + 2];
+      
+      // Ignore extremely bright backgrounds
+      if (red > 240 && green > 240 && blue > 240) return;
+      
+      totalPixels++;
+      
+      // Detect heavy redness (Inflammation/Erythema)
+      if (red > 120 && red > green * 1.4 && red > blue * 1.4) {
+        redPixels++;
+      }
+      
+      // Detect necrosis / eschar (Very dark tissue, but not pure background black)
+      if (red < 50 && green < 50 && blue < 50 && (red+green+blue > 10)) {
+        darkPixels++;
+      }
+    });
+    
+    const redRatio = totalPixels > 0 ? (redPixels / totalPixels) : 0;
+    const darkRatio = totalPixels > 0 ? (darkPixels / totalPixels) : 0;
+    
+    console.log(`[Algorithm] Red Ratio: ${(redRatio*100).toFixed(1)}%, Dark Ratio: ${(darkRatio*100).toFixed(1)}%`);
+    
+    let category = 'Mild';
+    let predictedClass = 'Normal Healing';
+    let confidence = 75;
+    
+    if (darkRatio > 0.05) {
+      category = 'Risky';
+      predictedClass = 'Necrotic Tissue Detected';
+      confidence = 88;
+    } else if (redRatio > 0.15) {
+      category = 'Risky';
+      predictedClass = 'Severe Inflammation';
+      confidence = 82;
+    } else if (redRatio > 0.05) {
+      category = 'Moderate';
+      predictedClass = 'Moderate Erythema';
+      confidence = 70;
+    }
+    
+    return {
+      class: predictedClass,
+      category: category,
+      confidence: confidence,
+      estimatedArea: Math.round(redPixels + darkPixels)
+    };
+  } catch (err) {
+    console.error("Local CV Algorithm Error:", err.message);
+    return null;
+  }
+}
 
 const app = express();
 app.use(cors());
@@ -108,7 +188,16 @@ mongoose.connect(mongoUri)
   .then(() => console.log('MongoDB Connected to WoundIQ'))
   .catch(err => console.log('MongoDB connection error:', err));
 
-const upload = multer({ dest: 'uploads/' });
+// Multer with diskStorage to preserve file extensions (critical for image serving)
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, 'uploads/'),
+  filename: (req, file, cb) => {
+    const uniqueName = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname) || '.jpg';
+    cb(null, uniqueName + ext);
+  }
+});
+const upload = multer({ storage });
 
 // Auth Middleware
 const authMiddleware = async (req, res, next) => {
@@ -117,25 +206,35 @@ const authMiddleware = async (req, res, next) => {
   try {
     const decoded = jwt.decode(token, JWT_SECRET);
     req.user = await User.findById(decoded.id);
+    if (!req.user) return res.status(401).json({ error: 'User not found' });
     next();
   } catch (err) {
     res.status(401).json({ error: 'Invalid token' });
   }
 };
 
+// Doctor Role Middleware
+const doctorMiddleware = async (req, res, next) => {
+  if (!req.user || req.user.role !== 'doctor') {
+    return res.status(403).json({ error: 'Access denied: Doctor role required' });
+  }
+  next();
+};
+
 // Routes - Auth
 app.post('/api/auth/register', async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, role } = req.body;
     const existing = await User.findOne({ email });
     if (existing) return res.status(400).json({ error: 'Email already exists' });
     
     const hashedPassword = await bcrypt.hash(password, 10);
-    const user = new User({ name, email, password: hashedPassword });
+    const userRole = role === 'doctor' ? 'doctor' : 'patient';
+    const user = new User({ name, email, password: hashedPassword, role: userRole });
     await user.save();
     
     const token = jwt.encode({ id: user._id }, JWT_SECRET);
-    res.json({ token, user: { id: user._id, name: user.name, email: user.email } });
+    res.json({ token, user: { id: user._id, name: user.name, email: user.email, role: user.role } });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -151,14 +250,92 @@ app.post('/api/auth/login', async (req, res) => {
     if (!isMatch) return res.status(400).json({ error: 'Invalid credentials' });
     
     const token = jwt.encode({ id: user._id }, JWT_SECRET);
-    res.json({ token, user: { id: user._id, name: user.name, email: user.email } });
+    res.json({ token, user: { id: user._id, name: user.name, email: user.email, role: user.role } });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 app.get('/api/auth/me', authMiddleware, (req, res) => {
-  res.json({ user: { id: req.user._id, name: req.user.name, email: req.user.email } });
+  res.json({ user: { id: req.user._id, name: req.user.name, email: req.user.email, role: req.user.role, profile: req.user.profile } });
+});
+
+app.put('/api/auth/profile', authMiddleware, async (req, res) => {
+  try {
+    req.user.profile = { ...req.user.profile, ...req.body };
+    await req.user.save();
+    res.json({ user: { id: req.user._id, name: req.user.name, email: req.user.email, role: req.user.role, profile: req.user.profile } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Routes - Stats Dashboard
+app.get('/api/stats', authMiddleware, async (req, res) => {
+  try {
+    const wounds = await WoundHistory.find({ userId: req.user._id });
+    
+    // Calculate total checkins, active vs healed, and risk breakdown
+    let totalCheckins = 0;
+    let riskyCount = 0;
+    let healingCount = 0;
+    
+    const categoryDistribution = {};
+    const timelineData = [];
+
+    wounds.forEach(w => {
+      totalCheckins += w.checkins.length;
+      if (w.checkins.length > 0) {
+        const latest = w.checkins[w.checkins.length - 1];
+        if (latest.category === 'Risky') riskyCount++;
+        else healingCount++;
+        
+        categoryDistribution[latest.predictedClass] = (categoryDistribution[latest.predictedClass] || 0) + 1;
+      }
+      
+      // Collect all checkins for timeline trend (area reduction over time)
+      w.checkins.forEach(c => {
+        if (c.woundAreaCm2) {
+          timelineData.push({
+            date: c.date,
+            area: c.woundAreaCm2,
+            woundTitle: w.title,
+            risk: c.category
+          });
+        }
+      });
+    });
+
+    timelineData.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    res.json({
+      totalWounds: wounds.length,
+      activeWounds: wounds.filter(w => w.status === 'Active').length,
+      healedWounds: wounds.filter(w => w.status === 'Healed').length,
+      totalCheckins,
+      riskyWounds: riskyCount,
+      healingWounds: healingCount,
+      categoryDistribution,
+      timelineData
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Routes - Admin / Doctor Portal
+app.get('/api/admin/wounds', authMiddleware, doctorMiddleware, async (req, res) => {
+  try {
+    // Get all wounds that are "Risky" from all users
+    const wounds = await WoundHistory.find({ 
+      'checkins': { $elemMatch: { category: 'Risky' } },
+      status: 'Active'
+    }).populate('userId', 'name email profile').sort({ updatedAt: -1 });
+    
+    res.json(wounds);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Routes - Wounds
@@ -173,7 +350,11 @@ app.get('/api/wounds', authMiddleware, async (req, res) => {
 
 app.get('/api/wounds/:id', authMiddleware, async (req, res) => {
   try {
-    const wound = await WoundHistory.findOne({ _id: req.params.id, userId: req.user._id });
+    // Doctors can view any patient's wound; patients can only view their own
+    const query = req.user.role === 'doctor' 
+      ? { _id: req.params.id } 
+      : { _id: req.params.id, userId: req.user._id };
+    const wound = await WoundHistory.findOne(query).populate('userId', 'name email profile');
     if (!wound) return res.status(404).json({ error: 'Not found' });
     res.json(wound);
   } catch (err) {
@@ -240,10 +421,16 @@ app.post('/api/wounds/:id/checkin', authMiddleware, upload.single('image'), asyn
       aiResult.confidence = geminiResult.confidence;
     }
 
-    // If both AI services failed, provide a safe default
+    // If both external AI services failed, use the local algorithmic Computer Vision fallback
     if (!aiResult || !aiResult.class) {
-      aiResult = { class: 'Normal Healing', category: 'Mild', confidence: 0.5, estimatedArea: 0 };
-      console.log('Both AI services unavailable, using safe default classification');
+      console.log('Both AI services unavailable. Executing local CV algorithmic fallback...');
+      const localResult = await analyzeImageLocally(req.file.path);
+      if (localResult) {
+        aiResult = localResult;
+      } else {
+        // Ultimate safe fallback if even the local algorithm fails (e.g. invalid image)
+        aiResult = { class: 'Normal Healing', category: 'Mild', confidence: 50, estimatedArea: 0 };
+      }
     }
 
     // Prepare enriched data from Knowledge Base (Case Insensitive)

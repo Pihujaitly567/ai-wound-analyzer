@@ -30,6 +30,7 @@ body::before, body::after {
   filter: blur(120px);
   z-index: 0;
   opacity: 0.6;
+  pointer-events: none;
 }
 
 body::before {
@@ -54,4 +55,19 @@ body::after {
 @keyframes float2 {
   0% { transform: translate(0, 0) scale(1.2); }
   100% { transform: translate(-15%, -10%) scale(1); }
+}
+
+
+@media print {
+  .no-print, nav, button, .lucide-camera, .lucide-bot, input[type="file"], input[type="radio"], form {
+    display: none !important;
+  }
+  body {
+    background: white !important;
+  }
+  .glass-card {
+    box-shadow: none !important;
+    border: 1px solid #e2e8f0 !important;
+    background: white !important;
+  }
 }

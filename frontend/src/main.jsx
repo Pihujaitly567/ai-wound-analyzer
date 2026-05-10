@@ -4,8 +4,8 @@ import axios from 'axios'
 import './index.css'
 import App from './App.jsx'
 
-// Point all API requests to the shiny new Render cloud server!
-axios.defaults.baseURL = 'https://ai-wound-analyzer.onrender.com';
+// Point all API requests to the shiny new Render cloud server in prod, but localhost in dev
+axios.defaults.baseURL = window.location.hostname === 'localhost' ? 'http://localhost:3000' : 'https://ai-wound-analyzer.onrender.com';
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

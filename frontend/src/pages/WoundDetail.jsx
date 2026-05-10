@@ -5,7 +5,6 @@ import { Camera, Image as ImageIcon, Send, Clock, ShieldCheck, AlertCircle, Bot,
 import ChatWidget from '../components/ChatWidget';
 import TelehealthCard from '../components/TelehealthCard';
 import ImageComparisonSlider from '../components/ImageComparisonSlider';
-import html2pdf from 'html2pdf.js';
 
 export default function WoundDetail() {
   const { id } = useParams();
@@ -72,7 +71,13 @@ export default function WoundDetail() {
 
   const handleExportPDF = () => {
     const element = document.getElementById('report-content');
-    if (!element) return;
+    if (!element) {
+      alert("Report content not found!");
+      return;
+    }
+    
+    alert("Generating PDF... Please wait a few seconds while we build your report.");
+    
     const opt = {
       margin:       0.5,
       filename:     `${wound.title.replace(/\s+/g, '_')}_HealthReport.pdf`,
@@ -80,19 +85,27 @@ export default function WoundDetail() {
       html2canvas:  { scale: 2, useCORS: true },
       jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
     };
-    html2pdf().set(opt).from(element).save();
+    
+    // Use the globally loaded CDN script which is 100% reliable
+    if (window.html2pdf) {
+      window.html2pdf().set(opt).from(element).save();
+    } else {
+      alert("PDF engine is still loading, please try again in a few seconds.");
+    }
   };
 
   const toggleStatus = async () => {
     try {
+      console.log('toggleStatus called, current status:', wound.status);
       const newStatus = wound.status === 'Active' ? 'Healed' : 'Active';
       const res = await axios.put(`/api/wounds/${id}/status`, { status: newStatus }, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
+      console.log('Status updated:', res.data.status);
       setWound(res.data);
     } catch (err) {
-      console.error(err);
-      alert('Error updating status');
+      console.error('toggleStatus error:', err);
+      alert('Error updating status: ' + (err.response?.data?.error || err.message));
     }
   };
 

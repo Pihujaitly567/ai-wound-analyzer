@@ -3,6 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Auth from './pages/Auth';
 import Dashboard from './pages/Dashboard';
 import WoundDetail from './pages/WoundDetail';
+import Profile from './pages/Profile';
+import DoctorPortal from './pages/DoctorPortal';
 import Navbar from './components/Navbar';
 
 const ProtectedRoute = ({ children }) => {
@@ -32,6 +34,22 @@ function App() {
               element={
                 <ProtectedRoute>
                   <WoundDetail />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/profile" 
+              element={
+                <ProtectedRoute>
+                  <Profile />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/doctor" 
+              element={
+                <ProtectedRoute>
+                  <DoctorPortal />
                 </ProtectedRoute>
               } 
             />
